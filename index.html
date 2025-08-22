@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D + AR Viewer</title>
+
+  <!-- model-viewer -->
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      margin: 0; background:#0e0e10; color:#fff; font-family: system-ui, sans-serif;
+      display: grid; grid-template-rows: auto 1fr; height: 100vh;
+    }
+    header {
+      padding: 10px; display: grid; gap: 8px;
+      grid-template-columns: 1fr auto auto; align-items: center;
+      border-bottom: 1px solid #222;
+    }
+    header input[type="url"] {
+      width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #333; background:#141416; color:#fff;
+    }
+    header button, label.btn {
+      padding: 10px 14px; border:1px solid #333; background:#1b1c1f; color:#fff; border-radius: 10px; cursor:pointer;
+    }
+    label.btn { display:inline-block; }
+    input[type="file"] { display:none; }
+    model-viewer {
+      width: 100%; height: 100%;
+      --progress-bar-color: #4ade80; /* зелёный индикатор */
+    }
+    .hint {
+      position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+      padding: 8px 12px; background: rgba(0,0,0,0.5); border-radius: 12px; font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <!-- Вставьте прямую ссылку на .glb/.gltf или .usdz -->
+    <input id="urlInput" type="url" placeholder="Вставьте URL модели (.glb/.gltf). Для iOS можно указать .usdz ниже" />
+    <label class="btn">
+      Загрузить файл
+      <input id="fileInput" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
+    </label>
+    <button id="loadBtn">Загрузить по ссылке</button>
+  </header>
+
+  <model-viewer id="viewer"
+    src="model.glb"
+    ios-src="model.usdz"
+    alt="3D модель"
+    camera-controls
+    touch-action="pan-y"
+    autoplay
+    auto-rotate
+    ar
+    ar-modes="webxr scene-viewer quick-look"
+    ar-scale="auto"
+    ar-placement="floor"
+    environment-image="neutral"
+    poster=""
+    exposure="1.0"
+    shadow-intensity="0.6"
+    interaction-prompt="auto">
+    <div class="hint">Пальцем — вращение, колесо — зум, кнопка AR — просмотр в дополненной реальности</div>
+  </model-viewer>
+
+  <script>
+    const viewer = document.getElementById('viewer');
+    const urlInput = document.getElementById('urlInput');
+    const fileInput = document.getElementById('fileInput');
+    const loadBtn  = document.getElementById('loadBtn');
+
+    // Загрузка локального файла (.glb/.gltf)
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const blobUrl = URL.createObjectURL(file);
+      // Для iOS Quick Look нужен .usdz по HTTPS-URL (blob не подойдёт)
+      viewer.src = blobUrl;
+      // На всякий случай сбрасываем ios-src, если был локальный blob
+      viewer.iosSrc = '';
+    });
+
+    // Загрузка по URL (GLB/GLTF) + опционально пара USDC/USDZ через хэштег ?usdz=...
+    // Пример: https://site/model.glb?usdz=https%3A%2F%2Fsite%2Fmodel.usdz
+    loadBtn.addEventListener('click', () => {
+      if (!urlInput.value) return;
+      const url = new URL(urlInput.value, window.location.href);
+      const usdz = url.searchParams.get('usdz');
+      viewer.src = url.toString();
+      viewer.iosSrc = usdz || ''; // если передали отдельную ссылку для iOS
+    });
+
+    // Удобный перетаскиваемый дроп модели
+    document.addEventListener('dragover', (e) => { e.preventDefault(); });
+    document.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const file = [...e.dataTransfer.files].find(f => /\.glb$|\.gltf$/i.test(f.name));
+      if (file) {
+        const blobUrl = URL.createObjectURL(file);
+        viewer.src = blobUrl;
+        viewer.iosSrc = '';
+      }
+    });
+  </script>
+
+</body>
+</html>
