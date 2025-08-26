@@ -12,42 +12,115 @@
     :root { color-scheme: dark; }
     body {
       margin: 0; background:#0e0e10; color:#fff; font-family: system-ui, sans-serif;
-      display: grid; grid-template-rows: auto 1fr; height: 100vh;
+      display: grid; grid-template-rows: auto auto 1fr; height: 100vh;
+    }
+    header, .controls {
+      padding: 10px; display: grid; gap: 8px; align-items: center; border-bottom: 1px solid #222;
     }
     header {
-      padding: 10px; display: grid; gap: 8px;
-      grid-template-columns: 1fr auto auto; align-items: center;
-      border-bottom: 1px solid #222;
+      grid-template-columns: 1fr auto;
     }
     header input[type="url"] {
       width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #333; background:#141416; color:#fff;
     }
-    header button, label.btn {
+    header label.btn, header button.btn {
       padding: 10px 14px; border:1px solid #333; background:#1b1c1f; color:#fff; border-radius: 10px; cursor:pointer;
     }
     label.btn { display:inline-block; }
     input[type="file"] { display:none; }
-    model-viewer {
-      width: 100%; height: 100%;
-      --progress-bar-color: #4ade80; /* зелёный индикатор */
+
+    .controls {
+      grid-template-columns: repeat(7, minmax(120px, 1fr));
+      gap: 10px;
+    }
+    .control {
+      display: grid; gap: 6px; font-size: 12px;
+    }
+    .control input[type="range"], .control input[type="url"], .control select {
+      width: 100%; -webkit-appearance: none; appearance: none;
+      background:#141416; color:#fff; border:1px solid #333; border-radius: 8px; padding: 6px 8px;
+    }
+    .control input[type="color"] {
+      width: 100%; height: 36px; padding: 0; border-radius: 8px; border:1px solid #333; background:#141416;
+    }
+    .row {
+      display:flex; align-items:center; gap:8px; font-size:12px;
     }
     .hint {
       position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
       padding: 8px 12px; background: rgba(0,0,0,0.5); border-radius: 12px; font-size: 12px;
+    }
+    model-viewer {
+      width: 100%; height: 100%;
+      --progress-bar-color: #4ade80;
+      transition: filter .15s ease;
     }
   </style>
 </head>
 <body>
 
   <header>
-    <!-- Вставьте прямую ссылку на .glb/.gltf или .usdz -->
-    <input id="urlInput" type="url" placeholder="Вставьте URL модели (.glb/.gltf)." />
+    <!-- Вставьте прямую ссылку на .glb/.gltf; для iOS можно добавить ?usdz=... -->
+    <input id="urlInput" type="url" placeholder="Вставьте URL модели (.glb/.gltf). Для iOS добавьте ?usdz=..." />
     <label class="btn">
       Загрузить файл
       <input id="fileInput" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
     </label>
-    <!-- <button id="loadBtn">Загрузить по ссылке</button> -->
+    <!-- <button id="loadBtn" class="btn">Загрузить по ссылке</button> -->
   </header>
+
+  <!-- Панель управления окружением/светом -->
+  <section class="controls">
+    <div class="control">
+      <div>HDRI пресет</div>
+      <select id="hdriPreset">
+        <option value="neutral" selected>Neutral (встроенный)</option>
+        <!-- Ниже примеры популярных HDRI-хостингов; подставьте свои пути на CDN -->
+        <option value="https://modelviewer.dev/shared-assets/environments/studio.hdr">Studio</option>
+        <option value="https://modelviewer.dev/shared-assets/environments/spruit_sunrise_1k_HDR.hdr">Sunrise</option>
+        <option value="https://modelviewer.dev/shared-assets/environments/venice_sunset_1k.hdr">Sunset</option>
+        <option value="">— Свой URL ниже —</option>
+      </select>
+    </div>
+
+    <div class="control">
+      <div>Своя среда (HDR/EXR)</div>
+      <input id="hdriUrl" type="url" placeholder="https://…/env.hdr или .exr" />
+    </div>
+
+    <div class="control">
+      <div>Skybox фон</div>
+      <div class="row">
+        <input id="skyboxToggle" type="checkbox" />
+        <label for="skyboxToggle">Показывать небо (skybox)</label>
+      </div>
+    </div>
+
+    <div class="control">
+      <div>Экспозиция: <span id="expVal">1.00</span></div>
+      <input id="exposure" type="range" min="0" max="2.5" step="0.01" value="1.00" />
+    </div>
+
+    <div class="control">
+      <div>Тени: <span id="shadowVal">0.0</span></div>
+      <input id="shadow" type="range" min="0" max="2" step="0.05" value="0.0" />
+    </div>
+
+    <div class="control">
+      <div>Цвет фона</div>
+      <input id="bgColor" type="color" value="#0e0e10" />
+    </div>
+
+    <div class="control">
+      <div>Тон-подкраска</div>
+      <div class="row">Hue <span id="hueVal">0°</span></div>
+      <input id="hue" type="range" min="0" max="360" step="1" value="0" />
+      <div class="row">Sat <span id="satVal">100%</span></div>
+      <input id="sat" type="range" min="50" max="200" step="1" value="100" />
+      <div class="row">Bright <span id="brVal">100%</span></div>
+      <input id="br" type="range" min="50" max="150" step="1" value="100" />
+    </div>
+  </section>
 
   <model-viewer id="viewer"
     src="model.glb"
@@ -66,47 +139,126 @@
     exposure="1.0"
     shadow-intensity="0.0"
     interaction-prompt="auto">
-    <div class="hint">Пальцем — вращение, колесо — зум, кнопка AR — просмотр в дополненной реальности</div>
+    <div class="hint">Пальцем — вращение, колесо — зум, кнопка AR — просмотр в AR</div>
   </model-viewer>
 
   <script>
     const viewer = document.getElementById('viewer');
     const urlInput = document.getElementById('urlInput');
     const fileInput = document.getElementById('fileInput');
-    const loadBtn  = document.getElementById('loadBtn');
+    const loadBtn  = document.getElementById('loadBtn'); // может быть отсутствовать
 
-    // Загрузка локального файла (.glb/.gltf)
+    // === Загрузка модели ===
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
       const blobUrl = URL.createObjectURL(file);
-      // Для iOS Quick Look нужен .usdz по HTTPS-URL (blob не подойдёт)
       viewer.src = blobUrl;
-      // На всякий случай сбрасываем ios-src, если был локальный blob
-      viewer.iosSrc = '';
+      viewer.iosSrc = ''; // Quick Look требует HTTPS .usdz
     });
 
-    // Загрузка по URL (GLB/GLTF) + опционально пара USDC/USDZ через хэштег ?usdz=...
-    // Пример: https://site/model.glb?usdz=https%3A%2F%2Fsite%2Fmodel.usdz
-    loadBtn.addEventListener('click', () => {
-      if (!urlInput.value) return;
-      const url = new URL(urlInput.value, window.location.href);
-      const usdz = url.searchParams.get('usdz');
-      viewer.src = url.toString();
-      viewer.iosSrc = usdz || ''; // если передали отдельную ссылку для iOS
-    });
+    if (loadBtn) {
+      loadBtn.addEventListener('click', () => {
+        if (!urlInput.value) return;
+        const url = new URL(urlInput.value, window.location.href);
+        const usdz = url.searchParams.get('usdz');
+        viewer.src = url.toString();
+        viewer.iosSrc = usdz || '';
+      });
+    }
 
-    // Удобный перетаскиваемый дроп модели
     document.addEventListener('dragover', (e) => { e.preventDefault(); });
     document.addEventListener('drop', (e) => {
       e.preventDefault();
-      const file = [...e.dataTransfer.files].find(f => /\.glb$|\.gltf$/i.test(f.name));
+      const file = [...(e.dataTransfer?.files || [])].find(f => /\.glb$|\.gltf$/i.test(f.name));
       if (file) {
         const blobUrl = URL.createObjectURL(file);
         viewer.src = blobUrl;
         viewer.iosSrc = '';
       }
     });
+
+    // === Управление окружением/светом ===
+    const hdriPreset   = document.getElementById('hdriPreset');
+    const hdriUrl      = document.getElementById('hdriUrl');
+    const skyboxToggle = document.getElementById('skyboxToggle');
+    const exposure     = document.getElementById('exposure');
+    const expVal       = document.getElementById('expVal');
+    const shadow       = document.getElementById('shadow');
+    const shadowVal    = document.getElementById('shadowVal');
+    const bgColor      = document.getElementById('bgColor');
+
+    const hue = document.getElementById('hue');
+    const sat = document.getElementById('sat');
+    const br  = document.getElementById('br');
+    const hueVal = document.getElementById('hueVal');
+    const satVal = document.getElementById('satVal');
+    const brVal  = document.getElementById('brVal');
+
+    function applyEnvironment(urlOrKeyword) {
+      // environment-image влияет на освещение
+      viewer.setAttribute('environment-image', urlOrKeyword || 'neutral');
+      // при включенном skybox дублируем картинку в фон
+      if (skyboxToggle.checked) {
+        viewer.setAttribute('skybox-image', urlOrKeyword || 'neutral');
+      } else {
+        viewer.removeAttribute('skybox-image');
+      }
+    }
+
+    hdriPreset.addEventListener('change', () => {
+      const v = hdriPreset.value;
+      applyEnvironment(v || hdriUrl.value.trim());
+    });
+
+    hdriUrl.addEventListener('change', () => {
+      const v = hdriUrl.value.trim();
+      if (v) {
+        hdriPreset.value = ""; // переключаемся в режим кастомного URL
+        applyEnvironment(v);
+      }
+    });
+
+    skyboxToggle.addEventListener('change', () => {
+      const env = viewer.getAttribute('environment-image') || 'neutral';
+      if (skyboxToggle.checked) {
+        viewer.setAttribute('skybox-image', env);
+      } else {
+        viewer.removeAttribute('skybox-image');
+      }
+    });
+
+    exposure.addEventListener('input', () => {
+      expVal.textContent = Number(exposure.value).toFixed(2);
+      viewer.setAttribute('exposure', exposure.value);
+    });
+
+    shadow.addEventListener('input', () => {
+      shadowVal.textContent = Number(shadow.value).toFixed(1);
+      viewer.setAttribute('shadow-intensity', shadow.value);
+    });
+
+    bgColor.addEventListener('input', () => {
+      document.body.style.background = bgColor.value;
+    });
+
+    // Тон-подкраска (влияет на весь кадр — удобно для быстрых цветовых правок)
+    function applyFilter() {
+      hueVal.textContent = `${hue.value}°`;
+      satVal.textContent = `${sat.value}%`;
+      brVal.textContent  = `${br.value}%`;
+      viewer.style.filter =
+        `hue-rotate(${hue.value}deg) saturate(${sat.value}%) brightness(${br.value}%)`;
+    }
+    hue.addEventListener('input', applyFilter);
+    sat.addEventListener('input', applyFilter);
+    br.addEventListener('input',  applyFilter);
+    applyFilter();
+
+    // Инициализация начальных значений
+    applyEnvironment(hdriPreset.value);
+    expVal.textContent = Number(exposure.value).toFixed(2);
+    shadowVal.textContent = Number(shadow.value).toFixed(1);
   </script>
 
 </body>
