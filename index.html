@@ -17,25 +17,18 @@
     header, .controls {
       padding: 10px; display: grid; gap: 8px; align-items: center; border-bottom: 1px solid #222;
     }
-    header {
-      grid-template-columns: 1fr auto;
-    }
-    header input[type="url"] {
+    header { grid-template-columns: 1fr auto auto; }
+    input[type="url"], select {
       width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #333; background:#141416; color:#fff;
     }
-    header label.btn, header button.btn {
+    button.btn, label.btn {
       padding: 10px 14px; border:1px solid #333; background:#1b1c1f; color:#fff; border-radius: 10px; cursor:pointer;
     }
     label.btn { display:inline-block; }
     input[type="file"] { display:none; }
 
-    .controls {
-      grid-template-columns: repeat(7, minmax(120px, 1fr));
-      gap: 10px;
-    }
-    .control {
-      display: grid; gap: 6px; font-size: 12px;
-    }
+    .controls { grid-template-columns: repeat(8, minmax(140px, 1fr)); gap: 10px; }
+    .control { display: grid; gap: 6px; font-size: 12px; }
     .control input[type="range"], .control input[type="url"], .control select {
       width: 100%; -webkit-appearance: none; appearance: none;
       background:#141416; color:#fff; border:1px solid #333; border-radius: 8px; padding: 6px 8px;
@@ -43,39 +36,45 @@
     .control input[type="color"] {
       width: 100%; height: 36px; padding: 0; border-radius: 8px; border:1px solid #333; background:#141416;
     }
-    .row {
-      display:flex; align-items:center; gap:8px; font-size:12px;
+    .row { display:flex; align-items:center; gap:8px; font-size:12px; }
+    .small { opacity:.7; font-size:11px; }
+
+    model-viewer {
+      width: 100%; height: 100%;
+      --progress-bar-color: #4ade80;
+      transition: filter .15s ease;
+      background: transparent;
     }
     .hint {
       position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
       padding: 8px 12px; background: rgba(0,0,0,0.5); border-radius: 12px; font-size: 12px;
     }
-    model-viewer {
-      width: 100%; height: 100%;
-      --progress-bar-color: #4ade80;
-      transition: filter .15s ease;
+    .toast {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+      max-width: 90vw; padding: 10px 14px; border-radius: 10px;
+      background: rgba(20,20,24,.9); border:1px solid #333; color:#fff; font-size: 13px;
+      opacity: 0; pointer-events: none; transition: opacity .2s ease;
     }
+    .toast.show { opacity: 1; }
   </style>
 </head>
 <body>
 
   <header>
-    <!-- Вставьте прямую ссылку на .glb/.gltf; для iOS можно добавить ?usdz=... -->
-    <input id="urlInput" type="url" placeholder="Вставьте URL модели (.glb/.gltf). Для iOS добавьте ?usdz=..." />
+    <input id="urlInput" type="url" placeholder="Вставьте URL модели (.glb/.gltf). Для iOS можно добавить ?usdz=https://…/model.usdz" />
+    <button id="loadBtn" class="btn">Загрузить по ссылке</button>
     <label class="btn">
       Загрузить файл
       <input id="fileInput" type="file" accept=".glb,.gltf,model/gltf-binary,model/gltf+json" />
     </label>
-    <!-- <button id="loadBtn" class="btn">Загрузить по ссылке</button> -->
   </header>
 
-  <!-- Панель управления окружением/светом -->
+  <!-- Панель управления окружением/светом и AR -->
   <section class="controls">
     <div class="control">
       <div>HDRI пресет</div>
       <select id="hdriPreset">
         <option value="neutral" selected>Neutral (встроенный)</option>
-        <!-- Ниже примеры популярных HDRI-хостингов; подставьте свои пути на CDN -->
         <option value="https://modelviewer.dev/shared-assets/environments/studio.hdr">Studio</option>
         <option value="https://modelviewer.dev/shared-assets/environments/spruit_sunrise_1k_HDR.hdr">Sunrise</option>
         <option value="https://modelviewer.dev/shared-assets/environments/venice_sunset_1k.hdr">Sunset</option>
@@ -107,7 +106,7 @@
     </div>
 
     <div class="control">
-      <div>Цвет фона</div>
+      <div>Цвет фона страницы</div>
       <input id="bgColor" type="color" value="#0e0e10" />
     </div>
 
@@ -119,6 +118,15 @@
       <input id="sat" type="range" min="50" max="200" step="1" value="100" />
       <div class="row">Bright <span id="brVal">100%</span></div>
       <input id="br" type="range" min="50" max="150" step="1" value="100" />
+    </div>
+
+    <div class="control">
+      <div>AR пресет</div>
+      <select id="arPreset">
+        <option value="inherit" selected>AR как в 3D (WebXR)</option>
+        <option value="xr">AR с живым светом (WebXR)</option>
+      </select>
+      <div class="small">В Scene Viewer (Android) и Quick Look (iOS) освещение управляется системой.</div>
     </div>
   </section>
 
@@ -142,30 +150,35 @@
     <div class="hint">Пальцем — вращение, колесо — зум, кнопка AR — просмотр в AR</div>
   </model-viewer>
 
+  <div id="toast" class="toast" aria-live="polite"></div>
+
   <script>
-    const viewer = document.getElementById('viewer');
+    const viewer   = document.getElementById('viewer');
     const urlInput = document.getElementById('urlInput');
-    const fileInput = document.getElementById('fileInput');
-    const loadBtn  = document.getElementById('loadBtn'); // может быть отсутствовать
+    const fileInput= document.getElementById('fileInput');
+    const loadBtn  = document.getElementById('loadBtn');
 
     // === Загрузка модели ===
-    fileInput.addEventListener('change', async (e) => {
+    loadBtn.addEventListener('click', () => {
+      if (!urlInput.value) return;
+      const url = new URL(urlInput.value, window.location.href);
+      const usdz = url.searchParams.get('usdz');
+      viewer.src = url.toString();
+      viewer.iosSrc = usdz || ''; // если передали отдельную ссылку для iOS
+      showToast('Модель загружается по URL…');
+    });
+    urlInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loadBtn.click();
+    });
+
+    fileInput.addEventListener('change', (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
       const blobUrl = URL.createObjectURL(file);
       viewer.src = blobUrl;
       viewer.iosSrc = ''; // Quick Look требует HTTPS .usdz
+      showToast('Локальный файл загружен.');
     });
-
-    if (loadBtn) {
-      loadBtn.addEventListener('click', () => {
-        if (!urlInput.value) return;
-        const url = new URL(urlInput.value, window.location.href);
-        const usdz = url.searchParams.get('usdz');
-        viewer.src = url.toString();
-        viewer.iosSrc = usdz || '';
-      });
-    }
 
     document.addEventListener('dragover', (e) => { e.preventDefault(); });
     document.addEventListener('drop', (e) => {
@@ -175,6 +188,7 @@
         const blobUrl = URL.createObjectURL(file);
         viewer.src = blobUrl;
         viewer.iosSrc = '';
+        showToast('Файл загружен перетаскиванием.');
       }
     });
 
@@ -196,11 +210,10 @@
     const brVal  = document.getElementById('brVal');
 
     function applyEnvironment(urlOrKeyword) {
-      // environment-image влияет на освещение
-      viewer.setAttribute('environment-image', urlOrKeyword || 'neutral');
-      // при включенном skybox дублируем картинку в фон
+      const env = urlOrKeyword || 'neutral';
+      viewer.setAttribute('environment-image', env);
       if (skyboxToggle.checked) {
-        viewer.setAttribute('skybox-image', urlOrKeyword || 'neutral');
+        viewer.setAttribute('skybox-image', env);
       } else {
         viewer.removeAttribute('skybox-image');
       }
@@ -214,18 +227,15 @@
     hdriUrl.addEventListener('change', () => {
       const v = hdriUrl.value.trim();
       if (v) {
-        hdriPreset.value = ""; // переключаемся в режим кастомного URL
+        hdriPreset.value = ""; // ручной URL
         applyEnvironment(v);
       }
     });
 
     skyboxToggle.addEventListener('change', () => {
-      const env = viewer.getAttribute('environment-image') || 'neutral';
-      if (skyboxToggle.checked) {
-        viewer.setAttribute('skybox-image', env);
-      } else {
-        viewer.removeAttribute('skybox-image');
-      }
+      const currentEnv = viewer.getAttribute('environment-image') || 'neutral';
+      if (skyboxToggle.checked) viewer.setAttribute('skybox-image', currentEnv);
+      else viewer.removeAttribute('skybox-image');
     });
 
     exposure.addEventListener('input', () => {
@@ -242,7 +252,7 @@
       document.body.style.background = bgColor.value;
     });
 
-    // Тон-подкраска (влияет на весь кадр — удобно для быстрых цветовых правок)
+    // Тон-подкраска (пост-эффект на элемент)
     function applyFilter() {
       hueVal.textContent = `${hue.value}°`;
       satVal.textContent = `${sat.value}%`;
@@ -253,12 +263,55 @@
     hue.addEventListener('input', applyFilter);
     sat.addEventListener('input', applyFilter);
     br.addEventListener('input',  applyFilter);
-    applyFilter();
+
+    // === AR пресеты (только WebXR) ===
+    const arPreset = document.getElementById('arPreset');
+
+    function applyArPreset(mode) {
+      if (mode === 'xr') {
+        // Включаем оценку освещения из камеры
+        viewer.setAttribute('xr-environment', '');
+      } else {
+        // Наследуем HDRI/экспозицию из 3D
+        viewer.removeAttribute('xr-environment');
+      }
+    }
+
+    arPreset.addEventListener('change', () => {
+      applyArPreset(arPreset.value);
+    });
+
+    // Подсказки при входе/выходе из AR
+    viewer.addEventListener('ar-status', (ev) => {
+      if (ev.detail.status === 'session-started') {
+        const usingXREnv = viewer.hasAttribute('xr-environment');
+        if (usingXREnv) {
+          showToast('WebXR: используется живое освещение из камеры.');
+        } else {
+          showToast('WebXR: используется HDRI/экспозиция из 3D-предпросмотра. В системном AR результат может отличаться.');
+        }
+      }
+      if (ev.detail.status === 'failed') {
+        showToast('Не удалось запустить AR на этом устройстве.');
+      }
+    });
+
+    // === Toast ===
+    const toast = document.getElementById('toast');
+    let toastTimer;
+    function showToast(msg, ms = 3000) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), ms);
+    }
 
     // Инициализация начальных значений
     applyEnvironment(hdriPreset.value);
     expVal.textContent = Number(exposure.value).toFixed(2);
     shadowVal.textContent = Number(shadow.value).toFixed(1);
+    applyFilter();
+    applyArPreset('inherit');
   </script>
 
 </body>
